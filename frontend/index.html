@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIRE | Autonomous Incident Response Control Center</title>
+    <!-- Modern Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN for beautiful telemetry visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons for SRE UI elements -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <div class="logo-orb"></div>
+                <span class="logo-text">AIRE <span class="logo-sub">SRE</span></span>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-btn active" data-target="dashboard-view">
+                    <i data-lucide="activity"></i> Dashboard
+                </button>
+                <button class="nav-btn" data-target="postmortems-view">
+                    <i data-lucide="file-text"></i> Postmortems
+                </button>
+                <button class="nav-btn" data-target="eval-view">
+                    <i data-lucide="gauge"></i> Evaluation
+                </button>
+                <button class="nav-btn" data-target="security-view">
+                    <i data-lucide="shield-check"></i> Security Audits
+                </button>
+            </nav>
+
+            <div class="system-status-indicator">
+                <div class="pulse-indicator healthy" id="system-status-pulse"></div>
+                <div class="status-labels">
+                    <span class="status-main" id="system-status-title">System Healthy</span>
+                    <span class="status-sec">Auto-pilot active</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Header -->
+            <header class="header">
+                <div class="search-bar-placeholder">
+                    <i data-lucide="search"></i>
+                    <input type="text" placeholder="Query incidents, runbooks, or past postmortems..." disabled>
+                </div>
+                
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="resetEnvironment()">
+                        <i data-lucide="refresh-cw"></i> Reset Env
+                    </button>
+                    <div class="operator-profile">
+                        <div class="profile-avatar">S</div>
+                        <div class="profile-details">
+                            <span class="profile-name">SRE Lead Operator</span>
+                            <span class="profile-role">LeadSRE / admin</span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <div class="view-panel active" id="dashboard-view">
+                <!-- Outage Injection Control Panel -->
+                <section class="control-card glass-panel">
+                    <div class="section-header">
+                        <h2><i data-lucide="terminal"></i> Inject Outage Scenarios</h2>
+                        <p class="section-subtitle">Simulate production failures to trigger autonomous AIRE response swarm</p>
+                    </div>
+                    <div class="control-actions">
+                        <button class="btn btn-danger" onclick="triggerOutage('pod_crash')">
+                            <i data-lucide="zap"></i> Pod Crash Loop
+                        </button>
+                        <button class="btn btn-danger" onclick="triggerOutage('db_leak')">
+                            <i data-lucide="database"></i> Connection Leak
+                        </button>
+                        <button class="btn btn-danger" onclick="triggerOutage('slow_auth')">
+                            <i data-lucide="clock"></i> Latency Spike
+                        </button>
+                        <button class="btn btn-danger" onclick="triggerOutage('canary_failed')">
+                            <i data-lucide="git-branch"></i> Failed Canary
+                        </button>
+                    </div>
+                </section>
+
+                <div class="dashboard-grid">
+                    <!-- Incidents Grid -->
+                    <div class="grid-col-left">
+                        <section class="incidents-list-card glass-panel">
+                            <h3><i data-lucide="alert-octagon"></i> Incidents Queue</h3>
+                            <div class="incidents-list" id="incidents-container">
+                                <div class="empty-state">
+                                    <i data-lucide="check-circle-2"></i>
+                                    <p>No active incidents detected. Production environments healthy.</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Agent reasoning and live timeline -->
+                        <section class="agent-timeline-card glass-panel">
+                            <h3><i data-lucide="cpu"></i> Autonomous SRE Agent Timeline</h3>
+                            <div class="agent-timeline-wrapper" id="timeline-container">
+                                <div class="timeline-empty-state">
+                                    <p>Select or trigger an incident to view the AI investigator reasoning logs.</p>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- Telemetry charts, metrics, and logs -->
+                    <div class="grid-col-right">
+                        <!-- Remediator Approval Card (Human-in-the-loop Gate) -->
+                        <div id="approval-gate-container" style="display: none;">
+                            <section class="approval-card glass-panel glowing-card">
+                                <div class="approval-info">
+                                    <div class="glowing-ring">
+                                        <i data-lucide="shield-alert"></i>
+                                    </div>
+                                    <div>
+                                        <h4>Remediation Approval Gate Required</h4>
+                                        <p id="approval-description">Remediation proposal detected. Awaiting Lead verification.</p>
+                                    </div>
+                                </div>
+                                <button class="btn btn-approve" id="approve-btn">
+                                    <i data-lucide="check"></i> Approve & Execute Fix
+                                </button>
+                            </section>
+                        </div>
+
+                        <!-- Real-time metrics visualization -->
+                        <section class="metrics-card glass-panel">
+                            <h3><i data-lucide="line-chart"></i> Prometheus Performance Telemetry</h3>
+                            <div class="chart-container">
+                                <canvas id="telemetryChart"></canvas>
+                            </div>
+                        </section>
+
+                        <!-- Live Container Logs -->
+                        <section class="logs-card glass-panel">
+                            <h3><i data-lucide="menu"></i> Grafana Loki Container Logs</h3>
+                            <div class="logs-container-body" id="logs-body">
+                                <div class="log-line empty">Loki logs waiting...</div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Postmortems View -->
+            <div class="view-panel" id="postmortems-view">
+                <section class="glass-panel">
+                    <h2><i data-lucide="book-open"></i> SRE Postmortems Wiki</h2>
+                    <p class="view-desc">Archived records of autonomous incident analysis. Memory index is updated on resolution.</p>
+                    <div class="postmortem-list" id="postmortems-container">
+                        <div class="empty-state">No postmortems recorded yet.</div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Evaluation Dashboard View -->
+            <div class="view-panel" id="eval-view">
+                <div class="eval-grid">
+                    <section class="glass-panel stat-card">
+                        <div class="stat-icon"><i data-lucide="shield-check"></i></div>
+                        <div class="stat-value" id="eval-groundedness">98.5%</div>
+                        <div class="stat-label">Faithfulness / Groundedness</div>
+                    </section>
+                    <section class="glass-panel stat-card">
+                        <div class="stat-icon"><i data-lucide="timer"></i></div>
+                        <div class="stat-value" id="eval-mttr">4.2s</div>
+                        <div class="stat-label">Average AI-MTTR</div>
+                    </section>
+                    <section class="glass-panel stat-card">
+                        <div class="stat-icon"><i data-lucide="coins"></i></div>
+                        <div class="stat-value" id="eval-cost">$0.18</div>
+                        <div class="stat-label">Cumulative Token Cost</div>
+                    </section>
+                </div>
+
+                <div class="eval-detail-row">
+                    <section class="glass-panel eval-table-card">
+                        <h3>Agent Benchmarks Golden Dataset Scans</h3>
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Run ID</th>
+                                        <th>Incident Scenario</th>
+                                        <th>Precision</th>
+                                        <th>Recall</th>
+                                        <th>Latency (s)</th>
+                                        <th>Cost</th>
+                                        <th>Score</th>
+                                    </tr>
+                                </thead>
+                                id="evaluations-table-body"
+                                <tbody id="evaluations-table-body">
+                                    <tr>
+                                        <td colspan="7" class="text-center">No benchmark records evaluated yet.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Security Audit View -->
+            <div class="view-panel" id="security-view">
+                <section class="glass-panel">
+                    <h2><i data-lucide="shield-alert"></i> SRE Platform Access & Guardrail Audit Logs</h2>
+                    <p class="view-desc">Real-time audit log of tool validations, RBAC gatekeeps, credentials redaction, and prompt injection detection.</p>
+                    <div class="audit-list" id="audit-container">
+                        <div class="empty-state">No audit logs written.</div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Initialization Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database
+backend/aire.db
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Pytest and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
