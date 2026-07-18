@@ -10,10 +10,8 @@ Rather than simple sequential pipelines, AIRE serves as a flagship demonstration
 
 Review the deep technical specifications detailing how the agentic systems are constructed:
 
-* **[AGENTIC_INFRASTRUCTURE.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/system_design/AGENTIC_INFRASTRUCTURE.md)**: Defines the tool-calling registries, typed function schemas, short-term workspace isolation, and task coordination lifecycles.
 * **[PROMPT_ENGINEERING.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/ai/PROMPT_ENGINEERING.md)**: Details structured JSON configurations, prompt boundary controls, and hybrid RAG episodic memory retrieval.
 * **[ARCHITECTURE.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/architecture/ARCHITECTURE.md)**: Documents the system thread pools, SQLAlchemy database checkpointing, and non-blocking executors.
-* **[SYSTEM_DESIGN.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/system_design/SYSTEM_DESIGN.md)**: Outlines the scaling path (from 100 to 1M users) using distributed RabbitMQ message brokers, Redis PubSub event streams, and caching.
 
 ---
 
@@ -146,7 +144,6 @@ aire/
 │   └── app.js               # Websocket live listeners & action handlers
 ├── docs/                    # Evolved System Engineering specs directory
 │   ├── architecture/        # ARCHITECTURE.md spec sheet
-│   ├── system_design/       # SYSTEM_DESIGN.md scaling plans
 │   ├── ai/                  # PROMPT_ENGINEERING.md evaluation logs
 │   ├── security/            # SECURITY.md threat models
 │   └── adr/                 # Architectural Decision Records (ADR 001 - 003)
