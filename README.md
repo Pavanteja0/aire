@@ -1,54 +1,55 @@
-# AIRE: Autonomous Incident Response Engineer Platform
+# AIRE: Multi-Agent AI Orchestration & Autonomous Agentic Workflows Platform
 
-AIRE is a production-grade autonomous Site Reliability Engineering (SRE) control plane. It behaves like an experienced SRE agent at scale, detecting outages, querying Loki logs and Prometheus metrics, executing safe container remediations, compiling postmortems, and scoring performance through a dedicated evaluation pipeline.
+AIRE is a production-grade Agentic AI Orchestration Platform. It implements a collaborative swarm of specialized reasoning agents (Log Investigator, Metrics Analyzer, Kubernetes Workload Auditor, and Root Cause Reasoner) that dynamically plan, communicate, call tools, and solve complex multi-step problems inside an isolated workspace.
 
----
-
-## 🏛️ Comprehensive Engineering Documentation
-
-The repository has been evolved into a professional engineering portfolio. Review the detailed architecture, system design, security, and AI reasoning specifications:
-
-* **[ARCHITECTURE.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/architecture/ARCHITECTURE.md)**: Specifies module boundaries, SQLAlchemy WAL database integration, and thread-pool execution wrappers.
-* **[SYSTEM_DESIGN.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/system_design/SYSTEM_DESIGN.md)**: Outlines horizontally scalable infrastructure upgrades to support 1M+ active users using RabbitMQ, Redis PubSub, and read replicas.
-* **[PROMPT_ENGINEERING.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/ai/PROMPT_ENGINEERING.md)**: Details SRE Prompt designs, structured JSON configurations, hybrid RAG memory lookup, and golden-dataset scoring metrics.
-* **[SECURITY.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/security/SECURITY.md)**: Documents the platform threat model, secrets redaction filters, and RBAC matrix.
-* **[INTERVIEW_PREP.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/interviews/INTERVIEW_PREP.md)**: Features 100 hard systems, concurrency, and AI questions with model answers and hiring committee simulation feedback.
+Rather than simple sequential pipelines, AIRE serves as a flagship demonstration of building **reliable, production-ready Agentic Systems** that execute multi-step planning, function calling, episodic memory retrieval, and self-evaluation.
 
 ---
 
-## 🏛️ System Architecture Diagram
+## 🧠 Core Agentic AI Architectures
+
+Review the deep technical specifications detailing how the agentic systems are constructed:
+
+* **[AGENTIC_INFRASTRUCTURE.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/system_design/AGENTIC_INFRASTRUCTURE.md)**: Defines the tool-calling registries, typed function schemas, short-term workspace isolation, and task coordination lifecycles.
+* **[PROMPT_ENGINEERING.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/ai/PROMPT_ENGINEERING.md)**: Details structured JSON configurations, prompt boundary controls, and hybrid RAG episodic memory retrieval.
+* **[ARCHITECTURE.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/architecture/ARCHITECTURE.md)**: Documents the system thread pools, SQLAlchemy database checkpointing, and non-blocking executors.
+* **[SYSTEM_DESIGN.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/system_design/SYSTEM_DESIGN.md)**: Outlines the scaling path (from 100 to 1M users) using distributed RabbitMQ message brokers, Redis PubSub event streams, and caching.
+* **[INTERVIEW_PREP.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/interviews/INTERVIEW_PREP.md)**: Features 100 technical interview questions focusing on LLM latency, tool-calling errors, and agentic failure modes.
+
+---
+
+## 🏛️ Agentic Swarm Architecture Diagram
 
 ```mermaid
 graph TD
     subgraph Client Layer
         WebUI[Glassmorphic Web Dashboard]
-        WS[WebSocket Live Timeline]
+        WS[WebSocket Live State Stream]
     end
 
-    subgraph API Gateway & Control Plane
+    subgraph API Gateway & Context Control
         API[FastAPI Gateway]
-        RateLimiter[IP Rate Limiter slowapi]
-        DB[(SQLite WAL Database)]
+        DB[(SQLite state Checkpoints)]
     end
 
-    subgraph Agent Swarm Orchestrator
+    subgraph Agentic Planner & Memory
         Orchestrator[SRE Orchestrator]
-        RAG[RAG Long-Term Memory]
+        RAG[RAG Long-Term Episodic Memory]
     end
 
-    subgraph Worker Swarm
-        Agent1[Log Investigator]
-        Agent2[Metrics Investigator]
-        Agent3[Kubernetes Inspector]
-        Agent4[Root Cause Analyzer]
-        Agent5[Remediation Agent]
-        Agent6[Verification Agent]
+    subgraph Reasoning Swarm Workers
+        Agent1[Log Investigator Agent]
+        Agent2[Metrics Investigator Agent]
+        Agent3[Kubernetes Workload Agent]
+        Agent4[Root Cause Synthesis Agent]
+        Agent5[Remediation Driver Agent]
+        Agent6[Verification Auditor Agent]
     end
 
-    subgraph Target Environments
-        K8s[Kubernetes API]
-        Prom[Prometheus Metrics]
-        Loki[Loki Logs]
+    subgraph SRE Tool Call Registry
+        K8s[Kubernetes API Tool]
+        Prom[Prometheus Metrics Tool]
+        Loki[Loki Logs Tool]
     end
 
     WebUI --> API
@@ -60,7 +61,7 @@ graph TD
     %% DB State
     API & Orchestrator --> DB
     
-    %% Target connections
+    %% Tool execution
     Agent1 --> Loki
     Agent2 --> Prom
     Agent3 --> K8s
@@ -70,87 +71,87 @@ graph TD
 
 ---
 
-## 🤖 Collaborative Agent Swarm Sequence
+## 🤖 Dynamic Swarm Coordination Lifecycle
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Alert as Prometheus Alerting
-    participant Orchestrator as SRE Orchestrator
+    participant Alert as Alarm Gateway (Prometheus)
+    participant Orchestrator as Agentic Orchestrator
     participant Swarm as Worker Agents
-    participant Memory as RAG Episodic Memory
-    participant Human as SRE Operator (Human-in-the-Loop)
+    participant Memory as Episodic memory (RAG)
+    participant Human as Human-in-the-Loop Gatekeeper
 
-    Alert->>Orchestrator: Trigger Alert (e.g. SEV1: payment-service latency spike)
+    Alert->>Orchestrator: Ingest Outage Signal
     activate Orchestrator
-    Orchestrator->>Memory: Query past incidents for "payment-service latency"
-    Memory-->>Orchestrator: Return past solutions (e.g. "restarted payment-db pod")
+    Orchestrator->>Memory: Query past incidents & verified fixes
+    Memory-->>Orchestrator: Return context keys & fix logs
     
     rect rgb(240, 240, 240)
-        Note over Orchestrator, Swarm: Parallel Thread Investigation
-        Orchestrator->>Swarm: [Task 1] Metrics Agent: Fetch API latency & error rates
-        Orchestrator->>Swarm: [Task 2] Logs Agent: Query error traces in Loki
-        Orchestrator->>Swarm: [Task 3] K8s Agent: Check container restarts
+        Note over Orchestrator, Swarm: Parallel Task Execution
+        Orchestrator->>Swarm: [Task 1] Logs Agent: Query error signatures via Loki
+        Orchestrator->>Swarm: [Task 2] Metrics Agent: Fetch timeseries trends
+        Orchestrator->>Swarm: [Task 3] Workload Agent: Inspect K8s container state
     end
 
-    Swarm-->>Orchestrator: Returns correlated logs, metrics & pod restart evidence
-    Orchestrator->>Swarm: [Task 4] Root Cause Analyzer: Correlate evidence and past postmortems
-    Swarm-->>Orchestrator: Root Cause identified (OOM / DB Pool Exhaustion)
+    Swarm-->>Orchestrator: Append structured task findings to Workspace
+    Orchestrator->>Swarm: [Task 4] Root Cause Analyzer: Correlate logs + metrics findings
+    Swarm-->>Orchestrator: Identify Root Cause & recommend rollback/restart
     
-    Orchestrator->>Swarm: [Task 5] Remediation Agent: Propose fix (Scale replicas / rollback canary)
-    Swarm-->>Orchestrator: Remediation Proposed
+    Orchestrator->>Swarm: [Task 5] Remediation Agent: Propose action schema
+    Swarm-->>Orchestrator: Proposes JSON patch
 
     %% Human in the loop gate
-    Orchestrator->>Human: Request approval to execute remediation
-    Human-->>Orchestrator: Approved (or Paused & Audited)
+    Orchestrator->>Human: Request approval to execute tool mutations
+    Human-->>Orchestrator: Approve / Reject
 
-    Orchestrator->>Swarm: [Task 6] Remediation Agent: Execute remediation
-    Swarm->>Orchestrator: Remediation completed
+    Orchestrator->>Swarm: [Task 6] Remediation Agent: Execute tool mutations
+    Swarm->>Orchestrator: Mutations complete
     
-    Orchestrator->>Swarm: [Task 7] Verification Agent: Run regression checks on metrics
-    Swarm-->>Orchestrator: Verified (Latency < 300ms, error rate 0%)
+    Orchestrator->>Swarm: [Task 7] Verification Agent: Audit system health post-fix
+    Swarm-->>Orchestrator: System restored (Heartbeats green)
     
-    Orchestrator->>Memory: Index incident and write postmortem
+    Orchestrator->>Memory: Index incident context & save postmortem
     deactivate Orchestrator
 ```
 
 ---
 
-## 📂 Project Directory Structure
+## 📂 Project Directory structure
 
 ```text
 aire/
 ├── backend/
-│   ├── main.py              # FastAPI application, health checks, rate limits, static mount
+│   ├── main.py              # API Gateway, WebSocket events, static dashboard server
 │   ├── core/
-│   │   ├── config.py        # Global settings, model identifiers
-│   │   ├── security.py      # RBAC authorizer, prompt injection validator, secrets redaction
-│   │   └── models.py        # SQLAlchemy ORM schemas, database engine configurations
+│   │   ├── config.py        # System configurations & model identifiers
+│   │   ├── security.py      # RBAC authorizations, prompt injection filters, secrets redaction
+│   │   └── models.py        # SQLAlchemy schema mappings & state checkpoints
 │   ├── agents/
-│   │   ├── orchestrator.py  # SRE Orchestrator thread-safe workflow driver
-│   │   ├── swarm.py         # Sub-agents (Log, Metric, K8s, Root Cause, Remediation)
-│   │   └── tools.py         # SRE Client integrations (Prometheus, Loki, K8s)
+│   │   ├── orchestrator.py  # Thread-safe agent context coordinator
+│   │   ├── swarm.py         # Swarm workers (Logs, Metrics, Root Cause, Remediation)
+│   │   └── tools.py         # Unified Tool Call Registry
 │   ├── memory/
-│   │   ├── rag.py           # Incident history memory search context lookup
-│   │   └── episodic.py      # Past incident memory registers
+│   │   ├── rag.py           # Hybrid episodic memory search and lookup
+│   │   └── episodic.py      # Long-term memory stores
 │   ├── simulation/
-│   │   ├── mock_services.py # Mock timeseries data generators
-│   │   └── incident_generator.py # Simulators for PodCrash, DBLeak, LatencySpike
+│   │   ├── mock_services.py # Mock metrics and pod status generators
+│   │   └── incident_generator.py # simulated outage scenarios
 │   ├── evaluation/
-│   │   └── evaluator.py     # Ground truth evaluations scoring engine
+│   │   └── evaluator.py     # Accuracy, precision, and faithfulness evaluations
 │   └── tests/
-│       └── test_sre.py      # Automated testing suite (WAL, rate limits, lifecycles)
+│       └── test_sre.py      # Pytest suite verifying WAL checkpoints and rate limits
 ├── frontend/
-│   ├── index.html           # Dark glassmorphic control center dashboard
-│   ├── style.css            # Dark variable grids and layout overrides
-│   └── app.js               # Websocket state managers and click handlers
+│   ├── index.html           # Dark glassmorphic workflow telemetry dashboard
+│   ├── style.css            # Dark variables and responsive layouts
+│   └── app.js               # Websocket live listeners & action handlers
 ├── docs/                    # Evolved System Engineering specs directory
 │   ├── architecture/        # ARCHITECTURE.md spec sheet
 │   ├── system_design/       # SYSTEM_DESIGN.md scaling plans
 │   ├── ai/                  # PROMPT_ENGINEERING.md evaluation logs
 │   ├── security/            # SECURITY.md threat models
 │   ├── interviews/          # INTERVIEW_PREP.md model answers
-│   └── adr/                 # Architecture Decision Records (ADR 001, ADR 002)
+│   └── adr/                 # Architectural Decision Records (ADR 001 - 003)
 └── README.md                # Global documentation index
 ```
 
@@ -164,19 +165,19 @@ Install core requirements:
 pip install fastapi uvicorn pydantic-settings sqlalchemy slowapi pytest httpx
 ```
 
-### 2. Start the Backend Control Center
+### 2. Start the Backend API & Server
 Run the following command in the project directory:
 ```bash
 python -m backend.main
 ```
 
 ### 3. Open the Telemetry Dashboard
-Once the backend runs, navigate to:
+Open your browser and navigate to:
 **`http://127.0.0.1:8080/`**
-*(The FastAPI server mounts and serves the static files automatically from the root URL).*
+*(The FastAPI server automatically serves the dashboard index assets).*
 
 ### 4. Running the Pytest Suite
-To run isolated concurrency and rate-limiter verification checks:
+Execute automated database concurrency, rate-limiter, and agent lifecycle checks:
 ```bash
 python -m pytest backend/tests/test_sre.py
 ```
