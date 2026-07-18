@@ -53,7 +53,7 @@
             <header class="header">
                 <div class="search-bar-placeholder">
                     <i data-lucide="search"></i>
-                    <input type="text" placeholder="Query incidents, runbooks, or past postmortems..." disabled>
+                    <input type="text" id="dashboard-search-input" placeholder="Query incidents, runbooks, or past postmortems..." aria-label="Search incidents and runbooks">
                 </div>
                 
                 <div class="header-actions">
@@ -79,26 +79,49 @@
                         <p class="section-subtitle">Simulate production failures to trigger autonomous AIRE response swarm</p>
                     </div>
                     <div class="control-actions">
-                        <button class="btn btn-danger" onclick="triggerOutage('pod_crash')">
-                            <i data-lucide="zap"></i> Pod Crash Loop
+                        <button class="btn btn-outage btn-outage-sev1" onclick="triggerOutage('pod_crash')">
+                            <i data-lucide="zap"></i> Pod Crash Loop (SEV1)
                         </button>
-                        <button class="btn btn-danger" onclick="triggerOutage('db_leak')">
-                            <i data-lucide="database"></i> Connection Leak
+                        <button class="btn btn-outage btn-outage-sev1" onclick="triggerOutage('db_leak')">
+                            <i data-lucide="database"></i> Connection Leak (SEV1)
                         </button>
-                        <button class="btn btn-danger" onclick="triggerOutage('slow_auth')">
-                            <i data-lucide="clock"></i> Latency Spike
+                        <button class="btn btn-outage btn-outage-sev2" onclick="triggerOutage('slow_auth')">
+                            <i data-lucide="clock"></i> Latency Spike (SEV2)
                         </button>
-                        <button class="btn btn-danger" onclick="triggerOutage('canary_failed')">
-                            <i data-lucide="git-branch"></i> Failed Canary
+                        <button class="btn btn-outage btn-outage-sev2" onclick="triggerOutage('canary_failed')">
+                            <i data-lucide="git-branch"></i> Failed Canary (SEV2)
                         </button>
                     </div>
                 </section>
+
+                <!-- Mini KPI Panel -->
+                <div class="mini-kpi-row">
+                    <div class="kpi-card glass-panel">
+                        <span class="kpi-label">Average AI-MTTR</span>
+                        <span class="kpi-value" id="kpi-mttr">4.2s</span>
+                    </div>
+                    <div class="kpi-card glass-panel">
+                        <span class="kpi-label">Groundedness Score</span>
+                        <span class="kpi-value" id="kpi-groundedness">98.5%</span>
+                    </div>
+                    <div class="kpi-card glass-panel">
+                        <span class="kpi-label">Token Costs</span>
+                        <span class="kpi-value" id="kpi-costs">$0.18</span>
+                    </div>
+                </div>
 
                 <div class="dashboard-grid">
                     <!-- Incidents Grid -->
                     <div class="grid-col-left">
                         <section class="incidents-list-card glass-panel">
-                            <h3><i data-lucide="alert-octagon"></i> Incidents Queue</h3>
+                            <div class="queue-header-row">
+                                <h3><i data-lucide="alert-octagon"></i> Incidents Queue</h3>
+                                <div class="queue-filters">
+                                    <button class="filter-btn active" onclick="filterQueue('all')">All</button>
+                                    <button class="filter-btn" onclick="filterQueue('SEV1')">SEV1</button>
+                                    <button class="filter-btn" onclick="filterQueue('SEV2')">SEV2</button>
+                                </div>
+                            </div>
                             <div class="incidents-list" id="incidents-container">
                                 <div class="empty-state">
                                     <i data-lucide="check-circle-2"></i>
@@ -132,9 +155,14 @@
                                         <p id="approval-description">Remediation proposal detected. Awaiting Lead verification.</p>
                                     </div>
                                 </div>
-                                <button class="btn btn-approve" id="approve-btn">
-                                    <i data-lucide="check"></i> Approve & Execute Fix
-                                </button>
+                                <div class="approval-actions" style="display: flex; gap: 8px;">
+                                    <button class="btn btn-approve" id="approve-btn">
+                                        <i data-lucide="check"></i> Approve
+                                    </button>
+                                    <button class="btn btn-danger" id="reject-btn">
+                                        <i data-lucide="x"></i> Reject
+                                    </button>
+                                </div>
                             </section>
                         </div>
 
@@ -204,7 +232,6 @@
                                         <th>Score</th>
                                     </tr>
                                 </thead>
-                                id="evaluations-table-body"
                                 <tbody id="evaluations-table-body">
                                     <tr>
                                         <td colspan="7" class="text-center">No benchmark records evaluated yet.</td>

@@ -1,9 +1,12 @@
 import asyncio
 import logging
+import json
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 from backend.core.models import (
-    Incident, IncidentStatus, AgentTask, AgentTaskStatus, IncidentPostmortem, EvaluationMetric
+    Incident, IncidentStatus, IncidentSeverity, AgentTask, AgentTaskStatus, IncidentPostmortem, EvaluationMetric,
+    SQLIncident, SQLAgentTask, SQLIncidentPostmortem, SQLEvaluationMetric, SessionLocal, init_db,
+    sql_to_pydantic_incident, save_incident_to_db, save_postmortem_to_db, save_evaluation_to_db
 )
 from backend.agents.swarm import (
     KubernetesInspector, LogInvestigator, MetricsInvestigator, RootCauseAnalyzer, RemediationAgent, VerificationAgent
@@ -34,6 +37,62 @@ class SREOrchestrator:
         self.remediation_agent = RemediationAgent()
         self.verification_agent = VerificationAgent()
 
+        # Phase 4 DB recovery startup hook
+        self._load_historical_db_data()
+
+    def _load_historical_db_data(self):
+        """Loads historical records from database to populate memory maps on reboot."""
+        logger.info("Initializing SREOrchestrator DB recovery sync...")
+        init_db()
+        db = SessionLocal()
+        try:
+            sql_incs = db.query(SQLIncident).all()
+            for si in sql_incs:
+                self.active_incidents[si.id] = sql_to_pydantic_incident(si)
+            logger.info(f"Restored {len(self.active_incidents)} active/resolved incidents from SQLite DB.")
+            
+            sql_pms = db.query(SQLIncidentPostmortem).all()
+            for spm in sql_pms:
+                self.postmortems[spm.id] = IncidentPostmortem(
+                    id=spm.id,
+                    incident_id=spm.incident_id,
+                    title=spm.title,
+                    severity=IncidentSeverity(spm.severity),
+                    service=spm.service,
+                    created_at=spm.created_at,
+                    resolved_at=spm.resolved_at,
+                    owner=spm.owner,
+                    executive_summary=spm.executive_summary,
+                    timeline=json.loads(spm.timeline) if spm.timeline else [],
+                    trigger=spm.trigger,
+                    root_cause=spm.root_cause,
+                    remediation_details=spm.remediation_details,
+                    action_items=json.loads(spm.action_items) if spm.action_items else [],
+                    preventative_measures=json.loads(spm.preventative_measures) if spm.preventative_measures else []
+                )
+            logger.info(f"Restored {len(self.postmortems)} Incident Postmortems from SQLite DB.")
+                
+            sql_evs = db.query(SQLEvaluationMetric).all()
+            for sev in sql_evs:
+                self.evaluations.append(EvaluationMetric(
+                    run_id=sev.run_id,
+                    incident_id=sev.incident_id,
+                    incident_type=sev.incident_type,
+                    precision=sev.precision,
+                    recall=sev.recall,
+                    faithfulness=sev.faithfulness,
+                    hallucination_rate=sev.hallucination_rate,
+                    latency_seconds=sev.latency_seconds,
+                    token_cost_usd=sev.token_cost_usd,
+                    human_rating=sev.human_rating,
+                    timestamp=sev.timestamp
+                ))
+            logger.info(f"Restored {len(self.evaluations)} evaluation runs from SQLite DB.")
+        except Exception as e:
+            logger.error(f"Failed to restore historical data from database: {e}", exc_info=True)
+        finally:
+            db.close()
+
     def register_listener(self, callback: Callable[[str, Any], None]):
         self.listeners.append(callback)
 
@@ -46,12 +105,13 @@ class SREOrchestrator:
 
     async def start_investigation(self, incident: Incident):
         """
-        Main orchestration loop for an incident.
+        Main orchestration loop for an incident. Saves state to DB at each key stage.
         """
         logger.info(f"Starting SRE Planner orchestrator for Incident: {incident.id}")
-        self.active_incidents[incident.id] = incident
         incident.status = IncidentStatus.INVESTIGATING
-        self._broadcast("incident_updated", incident.dict())
+        self.active_incidents[incident.id] = incident
+        save_incident_to_db(incident)
+        self._broadcast("incident_updated", incident.model_dump())
 
         # Step 1: Gather Topological Context (Graph RAG)
         topology = rag_store.get_topology_context(incident.service)
@@ -83,15 +143,17 @@ class SREOrchestrator:
                 description=desc
             )
             incident.tasks.append(agent_task)
-            self._broadcast("incident_updated", incident.dict())
+            save_incident_to_db(incident)
+            self._broadcast("incident_updated", incident.model_dump())
             
-            # Simulate real investigation delay (e.g. 1s)
+            # Simulate real investigation delay
             await asyncio.sleep(0.8)
             
-            # Run the agent execution
-            updated_task = agent.execute_task(agent_task, context)
+            # Run the agent execution in a worker thread pool
+            updated_task = await asyncio.to_thread(agent.execute_task, agent_task, context)
             context["all_findings"][agent.name] = updated_task.findings
-            self._broadcast("incident_updated", incident.dict())
+            save_incident_to_db(incident)
+            self._broadcast("incident_updated", incident.model_dump())
 
         # Step 4: Run Root Cause Analyzer Agent
         rca_task = AgentTask(
@@ -100,18 +162,19 @@ class SREOrchestrator:
             description="Correlate all metrics, logs, and topologies to synthesize root cause and propose remediation"
         )
         incident.tasks.append(rca_task)
-        self._broadcast("incident_updated", incident.dict())
+        save_incident_to_db(incident)
+        self._broadcast("incident_updated", incident.model_dump())
         
         await asyncio.sleep(0.8)
-        self.rca_agent.execute_task(rca_task, context)
+        await asyncio.to_thread(self.rca_agent.execute_task, rca_task, context)
         
         # Extract identified parameters
         incident.root_cause = context.get("deduced_root_cause", "Undetermined service crash")
         incident.proposed_remediation = context.get("recommended_remediation", "Check service parameters manually")
         incident.status = IncidentStatus.IDENTIFIED
-        self._broadcast("incident_updated", incident.dict())
+        save_incident_to_db(incident)
+        self._broadcast("incident_updated", incident.model_dump())
         
-        # Stop and wait for human approval (simulated state, backend api will toggle this)
         logger.info(f"Incident {incident.id} identified. Awaiting Human Approval for remediation: '{incident.proposed_remediation}'")
 
     async def execute_remediation(self, incident_id: str):
@@ -124,7 +187,8 @@ class SREOrchestrator:
 
         incident = self.active_incidents[incident_id]
         incident.status = IncidentStatus.REMEDIATING
-        self._broadcast("incident_updated", incident.dict())
+        save_incident_to_db(incident)
+        self._broadcast("incident_updated", incident.model_dump())
 
         # Setup context for remediation agent
         context = {
@@ -139,15 +203,17 @@ class SREOrchestrator:
             description=f"Safely execute proposed remediation: {incident.proposed_remediation}"
         )
         incident.tasks.append(remediation_task)
-        self._broadcast("incident_updated", incident.dict())
+        save_incident_to_db(incident)
+        self._broadcast("incident_updated", incident.model_dump())
 
         await asyncio.sleep(1.0)
-        self.remediation_agent.execute_task(remediation_task, context)
+        await asyncio.to_thread(self.remediation_agent.execute_task, remediation_task, context)
         incident.remediation_executed = True
+        save_incident_to_db(incident)
         
         # Step 6: Verify fix correctness
         incident.status = IncidentStatus.VERIFYING
-        self._broadcast("incident_updated", incident.dict())
+        self._broadcast("incident_updated", incident.model_dump())
 
         verification_task = AgentTask(
             id=f"{incident.id}-verify",
@@ -155,16 +221,18 @@ class SREOrchestrator:
             description="Perform latency audits, error checks and pod restart checks to verify resolution"
         )
         incident.tasks.append(verification_task)
-        self._broadcast("incident_updated", incident.dict())
+        save_incident_to_db(incident)
+        self._broadcast("incident_updated", incident.model_dump())
 
         await asyncio.sleep(0.8)
-        self.verification_agent.execute_task(verification_task, context)
+        await asyncio.to_thread(self.verification_agent.execute_task, verification_task, context)
         
         # Assume verification passes in our simulation
         incident.verification_passed = True
         incident.status = IncidentStatus.RESOLVED
         incident.resolved_at = datetime.now()
-        self._broadcast("incident_updated", incident.dict())
+        save_incident_to_db(incident)
+        self._broadcast("incident_updated", incident.model_dump())
 
         # Step 7: Draft Postmortem report
         pm_id = f"PM-{incident.id}"
@@ -198,8 +266,10 @@ class SREOrchestrator:
         
         self.postmortems[pm_id] = pm
         incident.postmortem_id = pm_id
-        self._broadcast("incident_updated", incident.dict())
-        self._broadcast("postmortem_created", pm.dict())
+        save_postmortem_to_db(pm)
+        save_incident_to_db(incident)
+        self._broadcast("incident_updated", incident.model_dump())
+        self._broadcast("postmortem_created", pm.model_dump())
 
         # Step 8: Commit incident resolution to Long-Term Episodic Memory
         episodic_memory.add_episode(
@@ -223,7 +293,8 @@ class SREOrchestrator:
             
         eval_metric = evaluator.evaluate_run(incident, eval_key)
         self.evaluations.append(eval_metric)
-        self._broadcast("evaluation_updated", eval_metric.dict())
+        save_evaluation_to_db(eval_metric)
+        self._broadcast("evaluation_updated", eval_metric.model_dump())
 
         logger.info(f"Incident {incident.id} fully resolved and postmortem completed successfully.")
 

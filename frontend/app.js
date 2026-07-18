@@ -4,7 +4,8 @@ let state = {
     postmortems: [],
     evaluations: [],
     auditLogs: [],
-    activeIncidentId: null
+    activeIncidentId: null,
+    queueFilter: "all"
 };
 
 let telemetryChart = null;
@@ -17,10 +18,15 @@ document.addEventListener("DOMContentLoaded", () => {
     initChart();
     connectWebSocket();
     
-    // Wire up approve button
+    // Wire up approve and reject buttons
     document.getElementById("approve-btn").addEventListener("click", () => {
         if (state.activeIncidentId) {
             approveRemediation(state.activeIncidentId);
+        }
+    });
+    document.getElementById("reject-btn").addEventListener("click", () => {
+        if (state.activeIncidentId) {
+            rejectRemediation(state.activeIncidentId);
         }
     });
 });
@@ -104,6 +110,9 @@ function initChart() {
     });
 }
 
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+
 // WebSocket Connection handling
 function connectWebSocket() {
     const wsUrl = `ws://${window.location.hostname || '127.0.0.1'}:8080/ws`;
@@ -111,6 +120,8 @@ function connectWebSocket() {
 
     ws.onopen = () => {
         console.log("AIRE backend websocket link established.");
+        reconnectAttempts = 0;
+        renderSystemIndicator();
     };
 
     ws.onmessage = (event) => {
@@ -169,8 +180,28 @@ function connectWebSocket() {
     };
 
     ws.onclose = () => {
-        console.warn("WebSocket closed. Attempting reconnect in 3 seconds...");
-        setTimeout(connectWebSocket, 3000);
+        if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            console.warn(`WebSocket closed. Reconnecting attempt ${reconnectAttempts}...`);
+            
+            // Set indicator state to offline
+            const pulse = document.getElementById("system-status-pulse");
+            const title = document.getElementById("system-status-title");
+            if (pulse && title) {
+                pulse.className = "pulse-indicator incident";
+                title.innerText = `Offline (Retrying ${reconnectAttempts}/${maxReconnectAttempts})`;
+            }
+            
+            setTimeout(connectWebSocket, 3000 * reconnectAttempts); // Exponential delay
+        } else {
+            console.error("Max WebSocket reconnection attempts reached. Control plane unreachable.");
+            const pulse = document.getElementById("system-status-pulse");
+            const title = document.getElementById("system-status-title");
+            if (pulse && title) {
+                pulse.className = "pulse-indicator incident";
+                title.innerText = "Connection Failed";
+            }
+        }
     };
 }
 
@@ -210,6 +241,41 @@ async function approveRemediation(incidentId) {
     }
 }
 
+function rejectRemediation(incidentId) {
+    console.log(`Remediation rejected by LeadSRE for incident: ${incidentId}`);
+    
+    // Hide approval banner
+    document.getElementById("approval-gate-container").style.display = "none";
+    
+    // Log a reject audit entry directly in UI
+    const now = new Date();
+    const rejectLog = {
+        timestamp: now.toISOString(),
+        actor: "LeadSRE",
+        action: "reject_fix",
+        target: incidentId,
+        status: "FLAGGED",
+        details: "Proposed SRE remediation action rejected by human operator."
+    };
+    state.auditLogs.unshift(rejectLog);
+    renderAuditLogs();
+    
+    // Add rejection warning in incident task list
+    const incident = state.incidents[incidentId];
+    if (incident) {
+        incident.remediation_executed = false;
+        // Append a warning status task
+        incident.tasks.push({
+            id: `${incidentId}-reject`,
+            agent_name: "HumanOperator",
+            status: "FAILED",
+            description: "Operator review gate failed: proposed fix rejected.",
+            findings: "Operator clicked Reject. Swarm auto-pilot paused. Manual recovery required."
+        });
+        renderActiveIncidentDetails();
+    }
+}
+
 // Rendering components
 function renderAll() {
     renderSystemIndicator();
@@ -238,7 +304,7 @@ function renderSystemIndicator() {
 
 function renderIncidentsList() {
     const container = document.getElementById("incidents-container");
-    const incs = Object.values(state.incidents);
+    let incs = Object.values(state.incidents);
     
     if (incs.length === 0) {
         container.innerHTML = `
@@ -253,6 +319,21 @@ function renderIncidentsList() {
     // Sort reverse chronological
     incs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     
+    // Apply queue severity filter
+    if (state.queueFilter !== "all") {
+        incs = incs.filter(inc => inc.severity === state.queueFilter);
+    }
+    
+    if (incs.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i data-lucide="alert-octagon"></i>
+                <p>No incidents match the active severity filter.</p>
+            </div>`;
+        lucide.createIcons();
+        return;
+    }
+    
     container.innerHTML = incs.map(inc => {
         const isActive = state.activeIncidentId === inc.id ? "active" : "";
         const createdDate = new Date(inc.created_at).toLocaleTimeString();
@@ -266,12 +347,29 @@ function renderIncidentsList() {
             </div>
         `;
     }).join('');
+    lucide.createIcons();
 }
 
 function selectIncident(id) {
     state.activeIncidentId = id;
     renderIncidentsList();
     renderActiveIncidentDetails();
+}
+
+function filterQueue(severity) {
+    state.queueFilter = severity;
+    
+    // Toggle active filter button styling
+    const filterBtns = document.querySelectorAll(".filter-btn");
+    filterBtns.forEach(btn => {
+        if (btn.innerText === severity || (severity === "all" && btn.innerText === "All")) {
+            btn.classList.add("active");
+        } else {
+            btn.classList.remove("active");
+        }
+    });
+    
+    renderIncidentsList();
 }
 
 function renderActiveIncidentDetails() {
@@ -333,9 +431,6 @@ function renderActiveIncidentDetails() {
 async function fetchLokiLogsMock(service, status) {
     const logsBody = document.getElementById("logs-body");
     try {
-        const query = status === "RESOLVED" ? "info" : "error";
-        const res = await fetch(`http://127.0.0.1:8080/api/security/audit`); // Just dummy hit or query local Loki api
-        
         // Generate realistic local UI logs
         let mockLines = [];
         const now = new Date();
@@ -480,9 +575,20 @@ function renderEvaluations() {
         const avgMttr = state.evaluations.reduce((acc, ev) => acc + ev.latency_seconds, 0) / state.evaluations.length;
         const totalCost = state.evaluations.reduce((acc, ev) => acc + ev.token_cost_usd, 0);
         
+        // Update evaluations tab cards
         document.getElementById("eval-groundedness").innerText = `${avgGroundedness.toFixed(1)}%`;
         document.getElementById("eval-mttr").innerText = `${avgMttr.toFixed(1)}s`;
         document.getElementById("eval-cost").innerText = `$${totalCost.toFixed(3)}`;
+        
+        // Update main dashboard HUD mini KPI cards
+        const hudGroundedness = document.getElementById("kpi-groundedness");
+        const hudMttr = document.getElementById("kpi-mttr");
+        const hudCosts = document.getElementById("kpi-costs");
+        if (hudGroundedness && hudMttr && hudCosts) {
+            hudGroundedness.innerText = `${avgGroundedness.toFixed(1)}%`;
+            hudMttr.innerText = `${avgMttr.toFixed(1)}s`;
+            hudCosts.innerText = `$${totalCost.toFixed(3)}`;
+        }
         
         tableBody.innerHTML = state.evaluations.map(ev => `
             <tr>

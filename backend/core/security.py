@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from backend.core.config import settings
+from backend.core.models import save_audit_log_to_db
 
 logger = logging.getLogger("aire.security")
 
@@ -46,6 +47,10 @@ class SecurityManager:
             "details": details
         }
         self.audit_log.append(log_entry)
+        try:
+            save_audit_log_to_db(actor, action, target, status, details)
+        except Exception as e:
+            logger.error(f"Failed to persist audit log: {e}")
         logger.info(f"AUDIT LOG: {actor} | {action} on {target} -> {status} ({details})")
 
     def authorize(self, actor: str, role: Role, action: Action, target: str) -> bool:

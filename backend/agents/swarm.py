@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from backend.core.models import AgentTask, AgentTaskStatus
 from backend.agents import tools
+from backend.core.config import settings
+import httpx
 
 logger = logging.getLogger("aire.agents.swarm")
 
@@ -127,6 +129,75 @@ class RootCauseAnalyzer(BaseSREAgent):
     def __init__(self):
         super().__init__(name="RootCauseAnalyzer", role="Postmortem & Failure Correlation")
 
+    def generate_sre_reasoning(self, findings_summary: str) -> Dict[str, str]:
+        """Queries Gemini LLM for SRE incident analysis, falling back to local deterministic rule heuristics."""
+        def get_deterministic_fallback():
+            findings_lower = findings_summary.lower()
+            if "oomkilled" in findings_lower or "outofmemory" in findings_lower:
+                return {
+                    "root_cause": "Java heap space OutOfMemoryError causing container CrashLoopBackOff.",
+                    "remediation": "Rollout restart of service pods to flush memory, with subsequent recommendation to scale JVM container heap size limits."
+                }
+            elif "connection slots are reserved" in findings_lower or "hikaripool" in findings_lower:
+                return {
+                    "root_cause": "HikariCP database connection pool leakage in client service, causing connection exhaustion on payment-db.",
+                    "remediation": "Restart client service pods to force close leaked connections, and schedule DB version rollback."
+                }
+            elif "slow response" in findings_lower or "throttling" in findings_lower:
+                return {
+                    "root_cause": "Downstream service auth-service bottlenecking on high-load crypto hashing operations.",
+                    "remediation": "Scale replicas of auth-service deployment to balance cryptographic parsing load."
+                }
+            elif "uncaught typeerror" in findings_lower or "canary" in findings_lower:
+                return {
+                    "root_cause": "Failed canary deployment of version v1.2.0, introducing a null template property error in production.",
+                    "remediation": "Rollback canary deployment to previous stable version v1.1.9."
+                }
+            return {
+                "root_cause": "Undetermined service degradation.",
+                "remediation": "Rollout restart of service pods to recover baseline health."
+            }
+
+        # Skip live API if key is default mock placeholder
+        if settings.LLM_API_KEY == "mock-key-for-local-execution" or not settings.LLM_API_KEY:
+            return get_deterministic_fallback()
+
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.MODEL_REASONING}:generateContent?key={settings.LLM_API_KEY}"
+            prompt = f"""
+            You are a Principal SRE at Google. Analyze the following cluster diagnostic findings and determine the root cause and the best remediation action.
+            
+            Findings:
+            {findings_summary}
+            
+            Format your response as a JSON object with exactly two keys:
+            "root_cause": <string describing root cause>
+            "remediation": <string describing remediation command action e.g. restart or rollback>
+            
+            Ensure your output is valid JSON.
+            """
+            
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
+            
+            response = httpx.post(url, json=payload, timeout=8.0)
+            if response.status_code == 200:
+                res_data = response.json()
+                text_response = res_data["candidates"][0]["content"]["parts"][0]["text"]
+                json_data = json.loads(text_response)
+                if "root_cause" in json_data and "remediation" in json_data:
+                    return {
+                        "root_cause": json_data["root_cause"],
+                        "remediation": json_data["remediation"]
+                    }
+            logger.warning(f"Gemini API returned status {response.status_code}. Using fallback heuristics.")
+        except Exception as e:
+            logger.warning(f"Failed to query Gemini API ({e}). Using fallback heuristics.")
+            
+        return get_deterministic_fallback()
+
     def execute_task(self, task: AgentTask, context: Dict[str, Any]) -> AgentTask:
         task.status = AgentTaskStatus.RUNNING
         service = context.get("service", "")
@@ -143,21 +214,11 @@ class RootCauseAnalyzer(BaseSREAgent):
         
         # Logic to deduce root cause based on findings text
         findings_str = json.dumps(all_findings).lower()
-        deduced_cause = "Unknown anomaly"
-        remediation_action = "Restart service pods to recover baseline health."
         
-        if "oomkilled" in findings_str or "outofmemory" in findings_str:
-            deduced_cause = "Java heap space OutOfMemoryError causing container CrashLoopBackOff."
-            remediation_action = "Rollout restart of service pods to flush memory, with subsequent recommendation to scale JVM container heap size limits."
-        elif "connection slots are reserved" in findings_str or "hikaripool" in findings_str:
-            deduced_cause = "HikariCP database connection pool leakage in client service, causing connection exhaustion on payment-db."
-            remediation_action = "Restart client service pods to force close leaked connections, and schedule DB version rollback."
-        elif "slow response" in findings_str or "throttling" in findings_str:
-            deduced_cause = "Downstream service auth-service bottlenecking on high-load crypto hashing operations."
-            remediation_action = "Scale replicas of auth-service deployment to balance cryptographic parsing load."
-        elif "uncaught typeerror" in findings_str or "canary" in findings_str:
-            deduced_cause = "Failed canary deployment of version v1.2.0, introducing a null template property error in production."
-            remediation_action = "Rollback canary deployment to previous stable version v1.1.9."
+        # Call the live/mock Gemini assistant
+        analysis = self.generate_sre_reasoning(findings_str)
+        deduced_cause = analysis["root_cause"]
+        remediation_action = analysis["remediation"]
 
         findings.append(f"\n**Identified Root Cause**: {deduced_cause}")
         findings.append(f"**Recommended Remediation**: {remediation_action}")

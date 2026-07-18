@@ -1,12 +1,36 @@
 import pytest
 import asyncio
+import threading
 from datetime import datetime
-from backend.core.models import Incident, IncidentSeverity, IncidentStatus, AgentTask, AgentTaskStatus
+from fastapi.testclient import TestClient
+
+from backend.main import app
+from backend.core.models import (
+    Incident, IncidentSeverity, IncidentStatus, AgentTask, AgentTaskStatus,
+    SessionLocal, SQLIncident, init_db, save_incident_to_db, sql_to_pydantic_incident
+)
 from backend.core.security import security_manager, Role, Action
 from backend.simulation.mock_services import sre_env
 from backend.simulation.incident_generator import incident_generator
 from backend.agents.orchestrator import orchestrator
 from backend.evaluation.evaluator import evaluator
+
+client = TestClient(app)
+
+@pytest.fixture(autouse=True)
+def clean_database():
+    """Autouse fixture to clear persistent SQL database tables prior to each test run."""
+    db = SessionLocal()
+    try:
+        db.query(SQLIncident).delete()
+        db.query(SQLIncidentPostmortem).delete()
+        db.query(SQLEvaluationMetric).delete()
+        db.query(SQLAuditLog).delete()
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 def test_sre_environment_ticks():
     """Verify simulation ticks generate metrics history and track active outages."""
@@ -101,3 +125,78 @@ async def test_orchestrator_lifecycle():
     pm_id = f"PM-{incident.id}"
     assert pm_id in orchestrator.postmortems
     assert orchestrator.postmortems[pm_id].root_cause == incident.root_cause
+
+# --- New Production Readiness Tests ---
+
+def test_health_endpoints():
+    """Verify healthz liveness and readyz readiness endpoints return 200 OK."""
+    res = client.get("/healthz")
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"
+
+    res_ready = client.get("/readyz")
+    assert res_ready.status_code == 200
+    assert res_ready.json()["status"] == "ok"
+
+def test_api_rate_limiting():
+    """Verify triggering manual alerts is rate limited to prevent CPU exhaustion."""
+    # Reset limit state by requesting with custom parameters or hitting endpoint repeatedly
+    triggered_count = 0
+    blocked_with_429 = False
+
+    # Perform 15 trigger requests in a loop to breach the 10/min threshold
+    for i in range(15):
+        res = client.post("/api/incidents/trigger?incident_type=pod_crash")
+        if res.status_code == 429:
+            blocked_with_429 = True
+            break
+        elif res.status_code == 200:
+            triggered_count += 1
+
+    # Should have triggered rate limits and returned HTTP 429
+    assert blocked_with_429 is True
+
+def test_database_concurrency_wal():
+    """Verify SQLite WAL allows parallel database writes from concurrent threads without locks."""
+    init_db()
+    db = SessionLocal()
+    # Clear any previous test data
+    db.query(SQLIncident).delete()
+    db.commit()
+    db.close()
+
+    errors = []
+
+    def concurrent_writer(thread_id: int):
+        try:
+            # Create a localized database entry
+            inc = Incident(
+                id=f"INC-CONC-TEST-{thread_id}",
+                title=f"Concurrent Thread Write Test {thread_id}",
+                description="Verifying WAL concurrency",
+                severity=IncidentSeverity.SEV3,
+                service="test-service",
+                detected_by="ConcurrencyThread"
+            )
+            save_incident_to_db(inc)
+        except Exception as e:
+            errors.append(e)
+
+    # Spawn 10 concurrent threads writing to database simultaneously
+    threads = []
+    for idx in range(10):
+        t = threading.Thread(target=concurrent_writer, args=(idx,))
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    # Verify that no thread failed with OperationalError: database is locked
+    assert len(errors) == 0
+
+    # Verify all 10 incidents were written successfully
+    db_verify = SessionLocal()
+    record_count = db_verify.query(SQLIncident).filter(SQLIncident.id.like("INC-CONC-TEST-%")).count()
+    db_verify.close()
+    assert record_count == 10
