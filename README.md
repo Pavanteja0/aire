@@ -10,6 +10,7 @@ Rather than simple sequential pipelines, AIRE serves as a flagship demonstration
 
 Review the deep technical specifications detailing how the agentic systems are constructed:
 
+* **[AGENTIC_AUDIT.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/ai/AGENTIC_AUDIT.md)**: Comprehensive hiring committee audit evaluations and production blueprints for OpenAI, Anthropic, Cursor, and Perplexity roles.
 * **[AGENTIC_INFRASTRUCTURE.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/system_design/AGENTIC_INFRASTRUCTURE.md)**: Defines the tool-calling registries, typed function schemas, short-term workspace isolation, and task coordination lifecycles.
 * **[PROMPT_ENGINEERING.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/ai/PROMPT_ENGINEERING.md)**: Details structured JSON configurations, prompt boundary controls, and hybrid RAG episodic memory retrieval.
 * **[ARCHITECTURE.md](file:///C:/Users/KALYAN/.gemini/antigravity/scratch/aire/docs/architecture/ARCHITECTURE.md)**: Documents the system thread pools, SQLAlchemy database checkpointing, and non-blocking executors.
